@@ -47,10 +47,8 @@ bool IsValidCalibration(const Camera& camera) {
   if (camera.width == 0 || camera.height == 0) {
     return false;
   }
-  if (!std::all_of(camera.params.begin(),
-                   camera.params.end(),
-                   [](const double param) { return std::isfinite(param); }) ||
-      !camera.VerifyParams()) {
+  // VerifyParams also rejects non-finite parameter values.
+  if (!camera.VerifyParams()) {
     return false;
   }
   for (const size_t idx : camera.FocalLengthIdxs()) {
@@ -131,7 +129,7 @@ bool AggregateSingleViewCalibrations(
 
   camera->model_id = candidate.model_id;
   camera->params = std::move(candidate.params);
-  camera->has_prior_focal_length = true;
+  camera->source = CameraSource::SINGLE_VIEW;
   return true;
 }
 

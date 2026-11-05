@@ -446,7 +446,7 @@ def parse_args(description: str | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--feature",
         default="sift",
-        choices=["sift", "aliked", "loma", "loma128"],
+        choices=["sift", "aliked", "loma", "loma128", "flexglue"],
     )
     parser.add_argument(
         "--mapper",
@@ -455,6 +455,13 @@ def parse_args(description: str | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--quality", default="high", choices=["low", "medium", "high"]
+    )
+    parser.add_argument(
+        "--max_num_features",
+        type=int,
+        default=-1,
+        help="Maximum number of features per image (non-positive: default of "
+        "the feature type and quality).",
     )
     parser.add_argument(
         "--uncalibrated",
@@ -535,6 +542,9 @@ def parse_args(description: str | None = None) -> argparse.Namespace:
     )
     args = parser.parse_args()
     args.colmap_path = Path(args.colmap_path).resolve()
+    # Child processes run inside each scene's workspace, not the caller's cwd.
+    args.data_path = args.data_path.resolve()
+    args.run_path = args.run_path.resolve()
     if args.num_seeds is not None:
         if args.num_seeds <= 0:
             parser.error("--num_seeds must be > 0")
@@ -604,7 +614,7 @@ def set_camera_priors(
                 continue
             camera_gt = camera_priors_sparse_gt.cameras[image_gt.camera_id]
             camera_gt.camera_id = image.camera_id
-            camera_gt.has_prior_focal_length = True
+            camera_gt.source = pycolmap.CameraSource.USER
             database.update_camera(camera_gt)
             updated_camera_ids.add(image.camera_id)
 
@@ -684,6 +694,8 @@ def colmap_reconstruction(
         "--quality",
         args.quality,
     ]
+    if args.max_num_features > 0:
+        colmap_args += ["--max_num_features", str(args.max_num_features)]
 
     # Learned calibration runs in the extraction step: the automatic
     # reconstructor runs extraction and calibration sequentially in one
@@ -2028,6 +2040,18 @@ def compare_reports(
     keys = _common_scene_keys(reports_a + reports_b)
     if not keys:
         raise SystemExit("No scenes shared across all reports.")
+
+    for dataset, category, scene in keys:
+        reference = reports_a[0][dataset][category][scene]
+        for report in reports_a[1:] + reports_b:
+            metrics = report[dataset][category][scene]
+            if metrics.error_type != reference.error_type or not np.array_equal(
+                metrics.error_thresholds, reference.error_thresholds
+            ):
+                raise ValueError(
+                    "Inconsistent error thresholds or types for "
+                    f"{dataset}/{category}/{scene}"
+                )
 
     first_metrics = _first_metrics(reports_a[0])
     error_type = first_metrics.error_type

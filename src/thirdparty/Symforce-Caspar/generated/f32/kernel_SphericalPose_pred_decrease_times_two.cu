@@ -1,10 +1,11 @@
-#include "kernel_SphericalPose_pred_decrease_times_two.h"
-#include "memops.cuh"
 #include <cooperative_groups.h>
 #include <cooperative_groups/details/partitioning.h>
 #include <cooperative_groups/memcpy_async.h>
 #include <cooperative_groups/reduce.h>
 #include <cuda_runtime.h>
+
+#include "kernel_SphericalPose_pred_decrease_times_two.h"
+#include "memops.cuh"
 
 namespace cg = cooperative_groups;
 
@@ -12,15 +13,12 @@ namespace caspar {
 
 __global__ void __launch_bounds__(1024, 1)
     SphericalPosePredDecreaseTimesTwoKernel(
-        float* SphericalPose_step,
-        unsigned int SphericalPose_step_num_alloc,
-        float* SphericalPose_precond_diag,
+        float *SphericalPose_step, unsigned int SphericalPose_step_num_alloc,
+        float *SphericalPose_precond_diag,
         unsigned int SphericalPose_precond_diag_num_alloc,
-        const float* const diag,
-        float* SphericalPose_njtr,
+        const float *const diag, float *SphericalPose_njtr,
         unsigned int SphericalPose_njtr_num_alloc,
-        float* const out_SphericalPose_pred_dec,
-        size_t problem_size) {
+        float *const out_SphericalPose_pred_dec, size_t problem_size) {
   const int global_thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ uint8_t inout_shared[4096];
 
@@ -32,31 +30,18 @@ __global__ void __launch_bounds__(1024, 1)
   if (global_thread_idx < problem_size) {
     ReadIdx4<1024, float, float, float4>(SphericalPose_step,
                                          0 * SphericalPose_step_num_alloc,
-                                         global_thread_idx,
-                                         r0,
-                                         r1,
-                                         r2,
-                                         r3);
+                                         global_thread_idx, r0, r1, r2, r3);
     ReadIdx4<1024, float, float, float4>(SphericalPose_njtr,
                                          0 * SphericalPose_njtr_num_alloc,
-                                         global_thread_idx,
-                                         r4,
-                                         r5,
-                                         r6,
-                                         r7);
+                                         global_thread_idx, r4, r5, r6, r7);
     ReadIdx4<1024, float, float, float4>(
-        SphericalPose_precond_diag,
-        0 * SphericalPose_precond_diag_num_alloc,
-        global_thread_idx,
-        r8,
-        r9,
-        r10,
-        r11);
+        SphericalPose_precond_diag, 0 * SphericalPose_precond_diag_num_alloc,
+        global_thread_idx, r8, r9, r10, r11);
     r12 = r1 * r9;
   };
-  LoadUnique<1, float, float>(diag, 0, (float*)inout_shared);
+  LoadUnique<1, float, float>(diag, 0, (float *)inout_shared);
   if (global_thread_idx < problem_size) {
-    ReadShared1<float>((float*)inout_shared, 0, r13);
+    ReadShared1<float>((float *)inout_shared, 0, r13);
   };
   __syncthreads();
   if (global_thread_idx < problem_size) {
@@ -68,20 +53,13 @@ __global__ void __launch_bounds__(1024, 1)
     r12 = fmaf(r13, r12, r4);
     ReadIdx2<1024, float, float, float2>(SphericalPose_step,
                                          4 * SphericalPose_step_num_alloc,
-                                         global_thread_idx,
-                                         r4,
-                                         r6);
+                                         global_thread_idx, r4, r6);
     ReadIdx2<1024, float, float, float2>(SphericalPose_njtr,
                                          4 * SphericalPose_njtr_num_alloc,
-                                         global_thread_idx,
-                                         r14,
-                                         r15);
+                                         global_thread_idx, r14, r15);
     ReadIdx2<1024, float, float, float2>(
-        SphericalPose_precond_diag,
-        4 * SphericalPose_precond_diag_num_alloc,
-        global_thread_idx,
-        r16,
-        r17);
+        SphericalPose_precond_diag, 4 * SphericalPose_precond_diag_num_alloc,
+        global_thread_idx, r16, r17);
     r18 = r4 * r16;
     r18 = fmaf(r13, r18, r14);
     r14 = r3 * r11;
@@ -93,40 +71,29 @@ __global__ void __launch_bounds__(1024, 1)
     r5 = fmaf(r3, r14, r5);
     r5 = fmaf(r6, r7, r5);
   };
-  SumStore<float>(out_SphericalPose_pred_dec_local,
-                  (float*)inout_shared,
-                  0,
-                  global_thread_idx < problem_size,
-                  r5);
-  SumFlushFinal<float>(
-      out_SphericalPose_pred_dec_local, out_SphericalPose_pred_dec, 1);
+  SumStore<float>(out_SphericalPose_pred_dec_local, (float *)inout_shared, 0,
+                  global_thread_idx < problem_size, r5);
+  SumFlushFinal<float>(out_SphericalPose_pred_dec_local,
+                       out_SphericalPose_pred_dec, 1);
 }
 
 void SphericalPosePredDecreaseTimesTwo(
-    float* SphericalPose_step,
-    unsigned int SphericalPose_step_num_alloc,
-    float* SphericalPose_precond_diag,
-    unsigned int SphericalPose_precond_diag_num_alloc,
-    const float* const diag,
-    float* SphericalPose_njtr,
-    unsigned int SphericalPose_njtr_num_alloc,
-    float* const out_SphericalPose_pred_dec,
-    size_t problem_size) {
+    float *SphericalPose_step, unsigned int SphericalPose_step_num_alloc,
+    float *SphericalPose_precond_diag,
+    unsigned int SphericalPose_precond_diag_num_alloc, const float *const diag,
+    float *SphericalPose_njtr, unsigned int SphericalPose_njtr_num_alloc,
+    float *const out_SphericalPose_pred_dec, size_t problem_size) {
+
   if (problem_size == 0) {
     return;
   }
 
   const int n_blocks = (problem_size + 1024 - 1) / 1024;
   SphericalPosePredDecreaseTimesTwoKernel<<<n_blocks, 1024>>>(
-      SphericalPose_step,
-      SphericalPose_step_num_alloc,
-      SphericalPose_precond_diag,
-      SphericalPose_precond_diag_num_alloc,
-      diag,
-      SphericalPose_njtr,
-      SphericalPose_njtr_num_alloc,
-      out_SphericalPose_pred_dec,
-      problem_size);
+      SphericalPose_step, SphericalPose_step_num_alloc,
+      SphericalPose_precond_diag, SphericalPose_precond_diag_num_alloc, diag,
+      SphericalPose_njtr, SphericalPose_njtr_num_alloc,
+      out_SphericalPose_pred_dec, problem_size);
 }
 
-}  // namespace caspar
+} // namespace caspar

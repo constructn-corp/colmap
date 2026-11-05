@@ -615,6 +615,44 @@ class TestDiffMetrics:
         assert scene_diff.num_components == 1
 
 
+@pytest.mark.parametrize(
+    ("changed_report", "thresholds", "error_type"),
+    [
+        ("b0", [10.0, 20.0], "relative_auc"),
+        ("a1", [10.0, 20.0], "relative_auc"),
+        ("b0", [1.0, 2.0], "relative_recall"),
+    ],
+)
+def test_compare_reports_rejects_incompatible_seeded_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+    changed_report: str,
+    thresholds: list[float],
+    error_type: str,
+) -> None:
+    paths_a = [Path("a0"), Path("a1")]
+    paths_b = [Path("b0"), Path("b1")]
+    reports = {}
+    for path in paths_a + paths_b:
+        changed = path.name == changed_report
+        metrics = Metrics(
+            aucs=np.array([20.0, 30.0]),
+            recalls=np.array([40.0, 50.0]),
+            error_thresholds=np.array(thresholds if changed else [1.0, 2.0]),
+            error_type=error_type if changed else "relative_auc",
+            num_images=2,
+            num_reg_images=2,
+            num_components=1,
+            largest_component=2,
+        )
+        reports[path] = {"toy": {"cat": {"scene": metrics}}}
+    monkeypatch.setattr(utils, "load_report", reports.__getitem__)
+
+    with pytest.raises(
+        ValueError, match="Inconsistent error thresholds or types"
+    ):
+        utils.compare_reports(paths_a, paths_b)
+
+
 def create_test_reconstruction() -> pycolmap.Reconstruction:
     pycolmap.set_random_seed(0)
     synthetic_dataset_options = pycolmap.SyntheticDatasetOptions()
@@ -717,15 +755,16 @@ class TestComputeGroupedRelErrors:
         assert len(errors) == num_images * (num_images - 1)
         np.testing.assert_allclose(errors, 0.0, atol=1e-5)
 
-    def test_transformed_reconstruction(self) -> None:
+    @pytest.mark.parametrize("scale", [1e-200, 1e-12, 1.0, 1e200])
+    def test_transformed_reconstruction(self, scale: float) -> None:
         gt_reconstruction = create_test_reconstruction()
         reconstruction = create_test_reconstruction()
         # A global similarity transform leaves relative poses unchanged.
         reconstruction.transform(
             pycolmap.Sim3d(
-                1.0,
+                scale,
                 pycolmap.Rotation3d(np.array([0, 1, 0, 0])),
-                np.array([1, 2, 3]),
+                scale * np.array([1.0, 2.0, 3.0]),
             )
         )
 

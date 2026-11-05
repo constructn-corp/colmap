@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "colmap/estimators/cost_functions/quaternion_utils.h"
 #include "colmap/estimators/cost_functions/utils.h"
 
 #include <Eigen/Core>
@@ -9,6 +10,62 @@
 #include <ceres/rotation.h>
 
 namespace colmap {
+
+// Angular error in radians between two camera rotations and a relative
+// rotation, expressed in the frame of sensor 1. Parameter blocks are unit
+// quaternions in Eigen (x, y, z, w) order. The residual follows the right
+// perturbation convention, i.e., it is the rotation vector r such that
+// hat_sensor2_from_sensor1 = sensor2_from_sensor1_prior * Exp(r), so a
+// covariance of the relative rotation prior must be expressed in the frame of
+// sensor 1.
+struct RelativeRotationCostFunctor {
+  template <typename T>
+  bool operator()(const T* const sensor1_from_world_rotation,
+                  const T* const sensor2_from_world_rotation,
+                  T* residuals) const {
+    const T* parameters[] = {sensor1_from_world_rotation,
+                             sensor2_from_world_rotation};
+    return (*this)(parameters, residuals);
+  }
+
+  // Creates a cost with two blocks: sensor1_from_world_rotation, then
+  // sensor2_from_world_rotation.
+  static ceres::CostFunction* Create(const Eigen::Quaterniond& cam2_from_cam1) {
+    return new ceres::
+        AutoDiffCostFunction<RelativeRotationCostFunctor, 3, 4, 4>(
+            new RelativeRotationCostFunctor{cam2_from_cam1});
+  }
+
+  // For rigs, parameters[0] and [1] are rig1_from_world and rig2_from_world.
+  // sensor1_index and sensor2_index locate the sensor_from_rig blocks;
+  // -1 denotes identity, and shared sensors may use the same block.
+  // With same_frame=true, omit the rig_from_world blocks and index only
+  // the sensor_from_rig blocks.
+  template <typename T>
+  bool operator()(T const* const* parameters, T* residuals) const {
+    // Compute hat_sensor2_from_sensor1 in sensor 2 / sensor 1 frames; the
+    // shared world frame rotation cancels from the 3D residual vector.
+    Eigen::Quaternion<T> error =
+        same_frame ? Eigen::Quaternion<T>::Identity()
+                   : EigenQuaternionMap<T>(parameters[1]) *
+                         EigenQuaternionMap<T>(parameters[0]).conjugate();
+    if (sensor2_index >= 0) {
+      error = EigenQuaternionMap<T>(parameters[sensor2_index]) * error;
+    }
+    if (sensor1_index >= 0) {
+      error =
+          error * EigenQuaternionMap<T>(parameters[sensor1_index]).conjugate();
+    }
+    error = sensor2_from_sensor1_prior.conjugate().cast<T>() * error;
+    AngleAxisFromEigenQuaternion(error.coeffs().data(), residuals);
+    return true;
+  }
+
+  Eigen::Quaterniond sensor2_from_sensor1_prior;
+  int sensor1_index = -1;
+  int sensor2_index = -1;
+  bool same_frame = false;
+};
 
 // Computes the error between a translation direction and the direction formed
 // from two positions such that: t_ij - scale * (p_j - p_i) is minimized.

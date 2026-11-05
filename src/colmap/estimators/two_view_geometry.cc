@@ -36,7 +36,7 @@ using FundamentalMatrixReport = LORANSAC<FundamentalMatrixSevenPointEstimator,
 // Whether a camera's intrinsics are known: it either carries a focal prior, or
 // is spherical and has no focal length to estimate in the first place.
 bool IsCameraCalibrated(const Camera& camera) {
-  return camera.IsSpherical() || camera.has_prior_focal_length;
+  return camera.IsSpherical() || camera.HasPriorFocalLength();
 }
 
 // DEGENSAC uses a different estimator type, so its report is a distinct type;
@@ -178,24 +178,36 @@ ExtractMatchedImagePoints(const std::vector<Eigen::Vector2d>& points1,
   return std::make_pair(std::move(matched_points1), std::move(matched_points2));
 }
 
+}  // namespace
+
 std::pair<std::vector<CamRayWithJac>, std::vector<CamRayWithJac>>
 ExtractMatchedCamRaysWithJac(const Camera& camera1,
                              const std::vector<Eigen::Vector2d>& points1,
                              const Camera& camera2,
                              const std::vector<Eigen::Vector2d>& points2,
-                             const FeatureMatches& matches) {
-  std::vector<CamRayWithJac> matched_rays1(matches.size());
-  std::vector<CamRayWithJac> matched_rays2(matches.size());
+                             const FeatureMatches& matches,
+                             bool skip_invalid) {
+  std::vector<CamRayWithJac> matched_rays1;
+  std::vector<CamRayWithJac> matched_rays2;
+  matched_rays1.reserve(matches.size());
+  matched_rays2.reserve(matches.size());
   for (size_t i = 0; i < matches.size(); ++i) {
     const point2D_t idx1 = matches[i].point2D_idx1;
     const point2D_t idx2 = matches[i].point2D_idx2;
-    matched_rays1[i] = camera1.CamRayFromImgWithJac(points1[idx1])
-                           .value_or(CamRayWithJac::Zero());
-    matched_rays2[i] = camera2.CamRayFromImgWithJac(points2[idx2])
-                           .value_or(CamRayWithJac::Zero());
+    const std::optional<CamRayWithJac> ray1 =
+        camera1.CamRayFromImgWithJac(points1[idx1]);
+    const std::optional<CamRayWithJac> ray2 =
+        camera2.CamRayFromImgWithJac(points2[idx2]);
+    if (skip_invalid && (!ray1.has_value() || !ray2.has_value())) {
+      continue;
+    }
+    matched_rays1.push_back(ray1.value_or(CamRayWithJac::Zero()));
+    matched_rays2.push_back(ray2.value_or(CamRayWithJac::Zero()));
   }
   return std::make_pair(std::move(matched_rays1), std::move(matched_rays2));
 }
+
+namespace {
 
 // Mark the geometry as degenerate unless there are enough matches to estimate
 // a model. Returns false (with the config set) when estimation must be
@@ -704,7 +716,7 @@ TwoViewGeometry EstimateTwoViewGeometry(
       return EstimateSphericalTwoViewGeometry(
           camera1, points1, camera2, points2, matches, options);
     } else if (camera1.camera_id == camera2.camera_id &&
-               !camera1.has_prior_focal_length &&
+               !camera1.HasPriorFocalLength() &&
                camera1.IsPerspectivePinhole()) {
       // A single shared unknown focal. Multi-focal models (e.g. PINHOLE) are
       // seeded isotropically (fx = fy = f) and refined later by bundle
@@ -712,8 +724,7 @@ TwoViewGeometry EstimateTwoViewGeometry(
       // fundamental-matrix path.
       return EstimateSharedFocalTwoViewGeometry(
           camera1, points1, points2, matches, options);
-    } else if (camera1.has_prior_focal_length &&
-               camera2.has_prior_focal_length) {
+    } else if (camera1.HasPriorFocalLength() && camera2.HasPriorFocalLength()) {
       // Both focals are known, so the pair reduces to the relative pose.
       return EstimateCalibratedTwoViewGeometry(
           camera1, points1, camera2, points2, matches, options);

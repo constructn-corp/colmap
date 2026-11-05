@@ -1,36 +1,26 @@
-#include "kernel_spherical_fixed_pose_res_jac.h"
-#include "memops.cuh"
 #include <cooperative_groups.h>
 #include <cooperative_groups/details/partitioning.h>
 #include <cooperative_groups/memcpy_async.h>
 #include <cooperative_groups/reduce.h>
 #include <cuda_runtime.h>
 
+#include "kernel_spherical_fixed_pose_res_jac.h"
+#include "memops.cuh"
+
 namespace cg = cooperative_groups;
 
 namespace caspar {
 
 __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
-    float* sensor_from_rig,
-    unsigned int sensor_from_rig_num_alloc,
-    float* wh,
-    unsigned int wh_num_alloc,
-    float* point,
-    unsigned int point_num_alloc,
-    SharedIndex* point_indices,
-    float* pixel,
-    unsigned int pixel_num_alloc,
-    float* pose,
-    unsigned int pose_num_alloc,
-    float* out_res,
-    unsigned int out_res_num_alloc,
-    float* const out_point_njtr,
-    unsigned int out_point_njtr_num_alloc,
-    float* const out_point_precond_diag,
+    float *sensor_from_rig, unsigned int sensor_from_rig_num_alloc, float *wh,
+    unsigned int wh_num_alloc, float *point, unsigned int point_num_alloc,
+    SharedIndex *point_indices, float *pixel, unsigned int pixel_num_alloc,
+    float *pose, unsigned int pose_num_alloc, float *out_res,
+    unsigned int out_res_num_alloc, float *const out_point_njtr,
+    unsigned int out_point_njtr_num_alloc, float *const out_point_precond_diag,
     unsigned int out_point_precond_diag_num_alloc,
-    float* const out_point_precond_tril,
-    unsigned int out_point_precond_tril_num_alloc,
-    size_t problem_size) {
+    float *const out_point_precond_tril,
+    unsigned int out_point_precond_tril_num_alloc, size_t problem_size) {
   const int global_thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ uint8_t inout_shared[16384];
 
@@ -46,38 +36,28 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
       r46;
 
   if (global_thread_idx < problem_size) {
-    ReadIdx2<1024, float, float, float2>(
-        wh, 0 * wh_num_alloc, global_thread_idx, r0, r1);
+    ReadIdx2<1024, float, float, float2>(wh, 0 * wh_num_alloc,
+                                         global_thread_idx, r0, r1);
     r2 = 5.00000000000000000e-01;
     r3 = 1.59154943091895346e-01;
     ReadIdx3<1024, float, float, float4>(sensor_from_rig,
                                          4 * sensor_from_rig_num_alloc,
-                                         global_thread_idx,
-                                         r4,
-                                         r5,
-                                         r6);
+                                         global_thread_idx, r4, r5, r6);
   };
-  LoadShared<3, float, float>(
-      point, 0 * point_num_alloc, point_indices_loc, (float*)inout_shared);
+  LoadShared<3, float, float>(point, 0 * point_num_alloc, point_indices_loc,
+                              (float *)inout_shared);
   if (global_thread_idx < problem_size) {
-    ReadShared3<float>((float*)inout_shared,
-                       point_indices_loc[threadIdx.x].target,
-                       r7,
-                       r8,
-                       r9);
+    ReadShared3<float>((float *)inout_shared,
+                       point_indices_loc[threadIdx.x].target, r7, r8, r9);
   };
   __syncthreads();
   if (global_thread_idx < problem_size) {
     r10 = -2.00000000000000000e+00;
     ReadIdx4<1024, float, float, float4>(sensor_from_rig,
                                          0 * sensor_from_rig_num_alloc,
-                                         global_thread_idx,
-                                         r11,
-                                         r12,
-                                         r13,
-                                         r14);
-    ReadIdx4<1024, float, float, float4>(
-        pose, 0 * pose_num_alloc, global_thread_idx, r15, r16, r17, r18);
+                                         global_thread_idx, r11, r12, r13, r14);
+    ReadIdx4<1024, float, float, float4>(pose, 0 * pose_num_alloc,
+                                         global_thread_idx, r15, r16, r17, r18);
     r19 = r11 * r17;
     r20 = -1.00000000000000000e+00;
     r19 = fmaf(r20, r19, r14 * r16);
@@ -109,8 +89,8 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
     r32 = r23 * r27;
     r32 = r32 * r26;
     r33 = fmaf(r30, r28, r32);
-    ReadIdx3<1024, float, float, float4>(
-        pose, 4 * pose_num_alloc, global_thread_idx, r34, r35, r36);
+    ReadIdx3<1024, float, float, float4>(pose, 4 * pose_num_alloc,
+                                         global_thread_idx, r34, r35, r36);
     r37 = r11 * r13;
     r37 = r37 * r27;
     r38 = r12 * r14;
@@ -158,8 +138,8 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
     r40 = r40 + r6;
     r44 = atan2f(r4, r40);
     r44 = fmaf(r3, r44, r2);
-    ReadIdx2<1024, float, float, float2>(
-        pixel, 0 * pixel_num_alloc, global_thread_idx, r3, r38);
+    ReadIdx2<1024, float, float, float2>(pixel, 0 * pixel_num_alloc,
+                                         global_thread_idx, r3, r38);
     r3 = fmaf(r3, r20, r0 * r44);
     r44 = -3.18309886183790691e-01;
     r46 = r23 * r27;
@@ -188,8 +168,8 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
     r8 = atan2f(r8, r36);
     r8 = fmaf(r44, r8, r2);
     r38 = fmaf(r38, r20, r1 * r8);
-    WriteIdx2<1024, float, float, float2>(
-        out_res, 0 * out_res_num_alloc, global_thread_idx, r3, r38);
+    WriteIdx2<1024, float, float, float2>(out_res, 0 * out_res_num_alloc,
+                                          global_thread_idx, r3, r38);
     r8 = 3.18309886183790691e-01;
     r8 = r38 * r8;
     r38 = r36 * r36;
@@ -237,12 +217,10 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
     r22 = fmaf(r6, r22, r4 * r32);
     r7 = fmaf(r22, r7, r36 * r40);
     r8 = fmaf(r7, r8, r37 * r43);
-    WriteSum3<float, float>((float*)inout_shared, r34, r28, r8);
+    WriteSum3<float, float>((float *)inout_shared, r34, r28, r8);
   };
-  FlushSumShared<3, float>(out_point_njtr,
-                           0 * out_point_njtr_num_alloc,
-                           point_indices_loc,
-                           (float*)inout_shared);
+  FlushSumShared<3, float>(out_point_njtr, 0 * out_point_njtr_num_alloc,
+                           point_indices_loc, (float *)inout_shared);
   if (global_thread_idx < problem_size) {
     r8 = 1.01321183642337789e-01;
     r8 = r1 * r8;
@@ -267,72 +245,47 @@ __global__ void __launch_bounds__(1024, 1) SphericalFixedPoseResJacKernel(
     r5 = r37 * r37;
     r9 = r7 * r7;
     r9 = fmaf(r8, r9, r42 * r5);
-    WriteSum3<float, float>((float*)inout_shared, r35, r2, r9);
+    WriteSum3<float, float>((float *)inout_shared, r35, r2, r9);
   };
   FlushSumShared<3, float>(out_point_precond_diag,
                            0 * out_point_precond_diag_num_alloc,
-                           point_indices_loc,
-                           (float*)inout_shared);
+                           point_indices_loc, (float *)inout_shared);
   if (global_thread_idx < problem_size) {
     r9 = fmaf(r45, r3, r10 * r38);
     r3 = fmaf(r37, r3, r7 * r38);
     r38 = r10 * r7;
     r2 = r45 * r37;
     r2 = fmaf(r42, r2, r8 * r38);
-    WriteSum3<float, float>((float*)inout_shared, r9, r3, r2);
+    WriteSum3<float, float>((float *)inout_shared, r9, r3, r2);
   };
   FlushSumShared<3, float>(out_point_precond_tril,
                            0 * out_point_precond_tril_num_alloc,
-                           point_indices_loc,
-                           (float*)inout_shared);
+                           point_indices_loc, (float *)inout_shared);
 }
 
-void SphericalFixedPoseResJac(float* sensor_from_rig,
-                              unsigned int sensor_from_rig_num_alloc,
-                              float* wh,
-                              unsigned int wh_num_alloc,
-                              float* point,
-                              unsigned int point_num_alloc,
-                              SharedIndex* point_indices,
-                              float* pixel,
-                              unsigned int pixel_num_alloc,
-                              float* pose,
-                              unsigned int pose_num_alloc,
-                              float* out_res,
-                              unsigned int out_res_num_alloc,
-                              float* const out_point_njtr,
-                              unsigned int out_point_njtr_num_alloc,
-                              float* const out_point_precond_diag,
-                              unsigned int out_point_precond_diag_num_alloc,
-                              float* const out_point_precond_tril,
-                              unsigned int out_point_precond_tril_num_alloc,
-                              size_t problem_size) {
+void SphericalFixedPoseResJac(
+    float *sensor_from_rig, unsigned int sensor_from_rig_num_alloc, float *wh,
+    unsigned int wh_num_alloc, float *point, unsigned int point_num_alloc,
+    SharedIndex *point_indices, float *pixel, unsigned int pixel_num_alloc,
+    float *pose, unsigned int pose_num_alloc, float *out_res,
+    unsigned int out_res_num_alloc, float *const out_point_njtr,
+    unsigned int out_point_njtr_num_alloc, float *const out_point_precond_diag,
+    unsigned int out_point_precond_diag_num_alloc,
+    float *const out_point_precond_tril,
+    unsigned int out_point_precond_tril_num_alloc, size_t problem_size) {
+
   if (problem_size == 0) {
     return;
   }
 
   const int n_blocks = (problem_size + 1024 - 1) / 1024;
   SphericalFixedPoseResJacKernel<<<n_blocks, 1024>>>(
-      sensor_from_rig,
-      sensor_from_rig_num_alloc,
-      wh,
-      wh_num_alloc,
-      point,
-      point_num_alloc,
-      point_indices,
-      pixel,
-      pixel_num_alloc,
-      pose,
-      pose_num_alloc,
-      out_res,
-      out_res_num_alloc,
-      out_point_njtr,
-      out_point_njtr_num_alloc,
-      out_point_precond_diag,
-      out_point_precond_diag_num_alloc,
-      out_point_precond_tril,
-      out_point_precond_tril_num_alloc,
-      problem_size);
+      sensor_from_rig, sensor_from_rig_num_alloc, wh, wh_num_alloc, point,
+      point_num_alloc, point_indices, pixel, pixel_num_alloc, pose,
+      pose_num_alloc, out_res, out_res_num_alloc, out_point_njtr,
+      out_point_njtr_num_alloc, out_point_precond_diag,
+      out_point_precond_diag_num_alloc, out_point_precond_tril,
+      out_point_precond_tril_num_alloc, problem_size);
 }
 
-}  // namespace caspar
+} // namespace caspar
